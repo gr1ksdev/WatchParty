@@ -49,11 +49,16 @@ describe('contratos compartilhados', () => {
     expect(clientMessageSchema.safeParse({ t: 'chat', text: 'Olá' }).success).toBe(true);
     expect(clientMessageSchema.safeParse({ t: 'chat', text: '' }).success).toBe(false);
     expect(clientMessageSchema.safeParse({ t: 'ping', ts: 10 }).success).toBe(true);
+    expect(clientMessageSchema.safeParse({ t: 'control', action: 'seek' }).success).toBe(false);
+    expect(clientMessageSchema.safeParse({ t: 'control', action: 'seek', position: 12 }).success).toBe(true);
     expect(clientMessageSchema.safeParse({ t: 'unknown' }).success).toBe(false);
   });
 
   it('aceita e rejeita mensagens de servidor conforme o protocolo', () => {
-    expect(serverMessageSchema.safeParse({ t: 'state', state: validState }).success).toBe(true);
+    expect(
+      serverMessageSchema.safeParse({ t: 'state', state: validState, serverTime: 1_700_000_000_000 }).success,
+    ).toBe(true);
+    expect(serverMessageSchema.safeParse({ t: 'state', state: validState }).success).toBe(false);
     expect(
       serverMessageSchema.safeParse({
         t: 'control',

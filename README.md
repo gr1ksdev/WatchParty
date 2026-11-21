@@ -2,8 +2,9 @@
 
 Bot do Telegram + Mini App para assistir a vídeos em salas sincronizadas.
 
-**Status:** Etapa 1 implementada (bot de teste, validação de links e criação de salas).
-O Mini App e a sincronização via WebSocket estão planejados para as Etapas 2 e 3.
+**Status:** Etapas 1, 2 e 3 implementadas. Bot, autenticação via `initData`, API REST,
+Mini App React, players MP4/HLS/YouTube e salas sincronizadas em tempo real via
+WebSocket/Durable Objects (controle do host, chat, presença e reconexão).
 A especificação completa está em [`PLANO.md`](PLANO.md).
 
 ---
@@ -26,7 +27,7 @@ npm install
 WatchParty/
 ├── apps/
 │   ├── worker/     # Cloudflare Worker: webhook, comandos, API e Durable Objects
-│   └── miniapp/    # reservado para o frontend da Etapa 2
+│   └── miniapp/    # Mini App React + Vite (Cloudflare Pages)
 ├── packages/
 │   └── shared/     # tipos e contratos (zod) compartilhados
 ├── scripts/        # set-webhook.mjs
@@ -68,9 +69,22 @@ Use exatamente o mesmo `TELEGRAM_WEBHOOK_SECRET` do `.dev.vars`.
 
 ### 3. URL do Mini App
 
-Em `apps/worker/wrangler.toml`, ajuste `MINI_APP_URL`. Na Etapa 1 ela é
-provisória: o Pages ainda não foi criado. O botão **Abrir sala** usa
-`MINI_APP_URL/?start_param=<id>`.
+Em `apps/worker/wrangler.toml`, ajuste `MINI_APP_URL` para a URL do Pages.
+O botão **Abrir sala** usa `MINI_APP_URL/?start_param=<id>`.
+
+### 4. Variáveis do Mini App
+
+Copie `apps/miniapp/.env.example` para `apps/miniapp/.env`:
+
+```dotenv
+VITE_WORKER_URL=https://watchparty-worker.<conta>.workers.dev
+VITE_BOT_USERNAME=SeuBot
+```
+
+Em desenvolvimento local, deixe `VITE_WORKER_URL` vazio: o Vite faz proxy de
+`/api` e `/ws` para `http://localhost:8787`. O modo simulado sem Telegram está em
+[`apps/miniapp/README.md`](apps/miniapp/README.md) e exige opt-in explícito
+tanto no Vite quanto no Worker (`ALLOW_FAKE_INIT_DATA`, apenas em `.dev.vars`).
 
 ## Executar localmente
 
@@ -78,10 +92,16 @@ provisória: o Pages ainda não foi criado. O botão **Abrir sala** usa
 npm run dev
 ```
 
-O Worker sobe em `http://localhost:8787`, com:
+O Worker sobe em `http://localhost:8787` e o Mini App em `http://localhost:5173`, com:
 
 - `GET /health` → `{"status":"ok","service":"watchparty-bot"}`
 - `POST /webhook/telegram` → comandos do bot
+- `POST /api/session` → valida `initData` e devolve ticket assinado
+- `GET /api/rooms/:id` → lê a sala com o ticket (header `Authorization: Bearer`)
+- `GET /ws/:id?ticket=...` → upgrade autenticado para o Durable Object da sala
+- `POST /api/dev/rooms` → **somente dev**, cria sala sem Telegram (exige `ALLOW_FAKE_INIT_DATA=1`)
+
+Roteiro de teste com duas sessões: [`docs/04-roteiro-etapa3.md`](docs/04-roteiro-etapa3.md).
 
 Para testar com o Telegram real, exponha a porta 8787 por um túnel HTTPS e
 configure o webhook com a URL pública (incluindo `/webhook/telegram`).
@@ -100,9 +120,12 @@ imprime apenas o resultado — nunca o token.
 ## Deploy
 
 ```bash
-npm run build   # verificação de tipos + dry run do Wrangler
-npm run deploy  # wrangler deploy
+npm run build   # verificação de tipos, vite build e dry run do Wrangler
+npm run deploy  # wrangler deploy (apenas o Worker)
 ```
+
+O build do Pages é feito a partir de `apps/miniapp` (`vite build` → `dist/`).
+Não faça deploy sem autorização.
 
 ## Comandos do bot
 
@@ -149,11 +172,7 @@ npm run build   # dry run do Worker + check
 - [`docs/02-decisoes-tecnicas.md`](docs/02-decisoes-tecnicas.md)
 - [`docs/03-setup-e-testes.md`](docs/03-setup-e-testes.md)
 
-## Pendente para a Etapa 2
+## Pronto para a Etapa 4
 
-- Frontend React + TypeScript + Vite no Cloudflare Pages.
-- Integração com o Telegram Web Apps SDK e validação do `initData` no backend.
-- Player MP4/HLS/YouTube e interface da sala.
-
-A sincronização (Durable Objects + WebSocket, chat e participantes) está prevista
-para a Etapa 3, conforme o `PLANO.md`.
+Os recursos principais do MVP estão implementados. A Etapa 4 (conforme o `PLANO.md`)
+cobre convites/permissões adicionais e melhorias de UI/UX — não iniciada aqui.

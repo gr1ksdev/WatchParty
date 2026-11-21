@@ -1,0 +1,164 @@
+:root {
+  --wp-bg: #17212b;
+  --wp-header: #17212b;
+  --wp-bottom-bar: #17212b;
+  --wp-surface: #202b36;
+  --wp-section: #1b2631;
+  --wp-text: #ffffff;
+  --wp-subtitle: #aab6c1;
+  --wp-hint: #8a97a3;
+  --wp-link: #62a9ea;
+  --wp-button: #3390ec;
+  --wp-button-text: #ffffff;
+  --wp-accent: #62a9ea;
+  --wp-danger: #ff8080;
+  --wp-separator: rgba(255, 255, 255, 0.09);
+  --wp-radius: 14px;
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --wp-bg: #ffffff;
+  --wp-header: #ffffff;
+  --wp-bottom-bar: #f4f4f5;
+  --wp-surface: #f1f3f5;
+  --wp-section: #f7f8f9;
+  --wp-text: #1c1c1e;
+  --wp-subtitle: #4b5563;
+  --wp-hint: #6b7280;
+  --wp-link: #007aff;
+  --wp-button: #3390ec;
+  --wp-button-text: #ffffff;
+  --wp-accent: #007aff;
+  --wp-danger: #d92d20;
+  --wp-separator: rgba(0, 0, 0, 0.08);
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--wp-bg);
+  color: var(--wp-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.button {
+  appearance: none;
+  border: 1px solid var(--wp-separator);
+  border-radius: 10px;
+  background: var(--wp-surface);
+  color: var(--wp-text);
+  font: inherit;
+  font-weight: 600;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: filter 0.15s ease, opacity 0.15s ease;
+}
+
+.button:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--wp-link);
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.button--primary {
+  background: var(--wp-button);
+  color: var(--wp-button-text);
+  border-color: transparent;
+}
+
+.button--small {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+input[type='text'],
+input[type='range'] {
+  accent-color: var(--wp-button);
+}
+
+.state-view {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+
+.state-view h1 {
+  font-size: 20px;
+}
+
+.state-view p {
+  color: var(--wp-subtitle);
+  max-width: 34ch;
+}
+
+.state-view__icon {
+  font-size: 40px;
+}
+
+.state-view__spinner {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 3px solid var(--wp-separator);
+  border-top-color: var(--wp-button);
+  animation: wp-spin 0.9s linear infinite;
+}
+
+@keyframes wp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .state-view__spinner {
+    animation-duration: 2.5s;
+  }
+}

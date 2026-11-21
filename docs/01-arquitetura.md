@@ -46,3 +46,57 @@ O estado segue o contrato definido no `PLANO.md` e vive no armazenamento do
 Durable Object sob a chave `state`. Embora WebSocket, chat e sincronização
 sejam implementados na Etapa 3, as estruturas (`participants`, `chat`,
 `version`, `updatedAt`, `settings`) já existem para evitar migrações futuras.
+
+## Etapa 2 — Mini App e autenticação
+
+```text
+Mini App (Pages) ──POST /api/session (initData)──▶ Worker (HMAC WebAppData)
+                 ◀── ticket assinado (60 s) ─────── Worker
+                 ──GET /api/rooms/:id (Bearer)────▶ Worker ──▶ RoomDO /state
+                 ◀── RoomState + viewer.isHost ───── Worker
+Player ──HTTP direto──▶ origem do vídeo (MP4 / HLS / YouTube)
+```
+
+| Módulo | Responsabilidade |
+|---|---|
+| `src/auth/init-data.ts` | HMAC-SHA256 do `initData`, janela de `auth_date`, usuário validado |
+| `src/auth/ticket.ts` | Ticket curto assinado (chave derivada do token do bot) |
+| `src/auth/fake.ts` | Identidade simulada, apenas com `ALLOW_FAKE_INIT_DATA=1` |
+| `src/api.ts` | Rotas REST `/api/session` e `/api/rooms/:id` |
+| `src/utils/cors.ts` | Allowlist de origem (Pages + localhost do Vite) |
+| `apps/miniapp/src/hooks/useTelegram.ts` | `ready()`, `expand()`, tema e dados de exibição |
+| `apps/miniapp/src/hooks/useRoomSession.ts` | Orquestra sessão → sala, renovação de ticket e erros |
+| `apps/miniapp/src/features/player/*` | Adaptadores HTML5, HLS e YouTube |
+| `apps/miniapp/src/features/room/RoomView.tsx` | Tela da sala e permissões visuais |
+
+O `viewer.isHost` é calculado no Worker comparando `ticket.userId` com
+`room.hostId`. O Mini App nunca usa `initDataUnsafe` para autenticação.
+
+## Etapa 3 — WebSocket e sincronização
+
+```text
+Mini App ──GET /ws/:roomId?ticket=...──▶ Worker (verifyTicket + getRoom)
+                                         │ headers: x-user-id / x-user-first-name
+                                         ▼
+                                   RoomDO /ws ──▶ RoomRuntime (autoridade)
+                                         │ fan-out: state/control/chat/participant
+                                         ▼
+                          todos os clientes WebSocket da sala
+Player de cada cliente ──HTTP direto──▶ origem do vídeo (sem proxy)
+```
+
+| Módulo | Responsabilidade |
+|---|---|
+| `src/ws/upgrade.ts` | Valida ticket, verifica sala, injeta identidade e encaminha ao DO |
+| `src/rooms/durable-object.ts` | Adapta `WebSocketPair`/`acceptWebSocket` ao runtime |
+| `src/rooms/runtime.ts` | Estado autoritativo, permissões, presença, chat, heartbeat e fan-out |
+| `packages/shared/protocol.ts` | Mensagens discriminadas e validadas com Zod |
+| `packages/shared/limits.ts` | Limites de mensagem, chat, participantes, heartbeat e reconexão |
+| `apps/miniapp/src/hooks/useRoomSocket.ts` | Conexão, heartbeat, backoff e renovação de ticket |
+| `apps/miniapp/src/hooks/usePlaybackSync.ts` | Aplicação de eventos, anti-loop e correção de deriva |
+| `apps/miniapp/src/features/room/RoomScreen.tsx` | Liga socket/sync/presença/chat à tela |
+
+O ticket vai na query do WebSocket (nunca em logs); o Worker o valida e injeta
+apenas headers confiáveis no `fetch` interno para o DO. O `RoomRuntime` nunca
+confia em userId enviado pelo cliente — ele usa a identidade do attachment da
+conexão. A origem do vídeo continua sendo acessada diretamente pelo dispositivo.

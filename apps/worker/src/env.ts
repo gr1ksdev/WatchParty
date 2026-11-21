@@ -11,4 +11,9 @@ export interface Env {
   MINI_APP_URL: string;
   WORKER_URL?: string;
   TELEGRAM_BOT_USERNAME?: string;
+  /**
+   * Modo de desenvolvimento: aceita um initData simulado, explicitamente marcado.
+   * Deve existir apenas em `.dev.vars`; nunca em `wrangler.toml [vars]` ou deploy.
+   */
+  ALLOW_FAKE_INIT_DATA?: string;
 }

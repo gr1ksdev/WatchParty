@@ -8,7 +8,9 @@ export default defineConfig({
     },
   },
   test: {
+    globals: true,
     environment: 'node',
-    include: ['packages/**/*.test.ts', 'apps/**/*.test.ts'],
+    setupFiles: ['./apps/miniapp/src/test/setup.ts'],
+    include: ['packages/**/*.test.ts', 'apps/**/*.test.ts', 'apps/**/*.test.tsx'],
   },
 });

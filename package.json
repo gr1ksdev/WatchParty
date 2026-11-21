@@ -14,7 +14,8 @@
     "test": "vitest run",
     "build": "npm run build --workspaces --if-present",
     "deploy": "npm run deploy --workspace @watchparty/worker",
-    "webhook:set": "node scripts/set-webhook.mjs"
+    "webhook:set": "node scripts/set-webhook.mjs",
+    "test:e2e:ws": "node scripts/e2e-ws.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

@@ -5,7 +5,7 @@ import {
   type VideoSource,
 } from '@watchparty/shared';
 import type { Env } from '../env';
-import { generateRoomId } from '../utils/ids';
+import { generateRoomId, isValidRoomId } from '../utils/ids';
 
 export interface CreateRoomInput {
   source: VideoSource;
@@ -33,5 +33,18 @@ export async function createRoom(env: Env, input: CreateRoomInput): Promise<Room
     throw new Error(`Falha ao criar sala no Durable Object: HTTP ${response.status}`);
   }
 
+  return roomStateSchema.parse(await response.json());
+}
+
+/** Lê o estado publicável de uma sala; `null` significa sala inexistente. */
+export async function getRoom(env: Env, roomId: string): Promise<RoomState | null> {
+  if (!isValidRoomId(roomId)) return null;
+
+  const stub = env.ROOMS.get(env.ROOMS.idFromName(roomId));
+  const response = await stub.fetch(new Request('https://room.internal/state'));
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Falha ao ler sala no Durable Object: HTTP ${response.status}`);
+  }
   return roomStateSchema.parse(await response.json());
 }

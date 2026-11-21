@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_CHAT_TEXT_LENGTH } from './limits';
 
 /** Identificadores de sala: 8 caracteres Crockford Base32 (sem I, L, O, U). */
 export const ROOM_ID_PATTERN = /^[0-9A-HJKMNP-TV-Z]{8}$/;
@@ -22,13 +23,17 @@ export const participantSchema = z.object({
   username: z.string().optional(),
   role: participantRoleSchema,
   joinedAt: z.number().int().nonnegative(),
+  /** Atualizado pelo heartbeat do DO; ausente em participantes de estados antigos. */
+  lastSeen: z.number().int().nonnegative().optional(),
 });
 export type Participant = z.infer<typeof participantSchema>;
 
 export const chatMessageSchema = z.object({
   id: z.string().min(1),
   userId: z.string().min(1),
-  text: z.string().min(1).max(1000),
+  /** Nome no momento do envio, para identificar mensagens de quem já saiu. */
+  firstName: z.string().min(1),
+  text: z.string().min(1).max(MAX_CHAT_TEXT_LENGTH),
   createdAt: z.number().int().nonnegative(),
 });
 export type ChatMessage = z.infer<typeof chatMessageSchema>;

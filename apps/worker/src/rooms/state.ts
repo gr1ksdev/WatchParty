@@ -48,6 +48,11 @@ export class RoomStore {
     return state;
   }
 
+  /** Persiste um estado já validado (usado pelo runtime de WebSocket). */
+  async save(state: RoomState): Promise<void> {
+    await this.storage.put(ROOM_STATE_KEY, roomStateSchema.parse(state));
+  }
+
   async read(): Promise<RoomState | null> {
     const stored = await this.storage.get<unknown>(ROOM_STATE_KEY);
     if (stored === null || stored === undefined) return null;
