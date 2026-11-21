@@ -13,12 +13,18 @@ export interface PlaybackStatus {
 }
 
 /** Interface comum a todos os adaptadores, independente da origem do vídeo. */
+export interface PlayOptions {
+  /** Autoplay com áudio é bloqueado; convidados iniciam sem som. */
+  muted?: boolean;
+}
+
 export interface PlayerController {
-  play(): Promise<void> | void;
+  play(options?: PlayOptions): Promise<void> | void;
   pause(): void;
   seekTo(seconds: number): void;
   getCurrentTime(): number;
   getDuration(): number;
+  setMuted?(muted: boolean): void;
   destroy(): void;
 }
 

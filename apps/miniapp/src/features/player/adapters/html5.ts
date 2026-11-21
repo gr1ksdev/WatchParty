@@ -61,7 +61,8 @@ export function createHtml5Adapter(options: AdapterOptions): PlayerController {
   }
 
   return {
-    play() {
+    play(playOptions) {
+      if (playOptions?.muted) video.muted = true;
       try {
         const result = video.play();
         if (result && typeof result.catch === 'function') result.catch(onPlayFailure);
@@ -81,6 +82,9 @@ export function createHtml5Adapter(options: AdapterOptions): PlayerController {
     },
     getDuration() {
       return Number.isFinite(video.duration) ? video.duration : 0;
+    },
+    setMuted(muted) {
+      video.muted = muted;
     },
     destroy() {
       destroyed = true;

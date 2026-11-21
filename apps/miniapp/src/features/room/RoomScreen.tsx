@@ -112,6 +112,11 @@ export function RoomScreen({ room, isHost, viewerId, user, initData, ticket, pla
       chatMessages={liveRoom.chat}
       onSendChat={sendChat}
       onControl={handleControl}
+      onEnableSound={() => {
+        // O clique é um gesto do usuário: permite iniciar com som se o autoplay foi bloqueado.
+        controller?.setMuted?.(false);
+        if (sync.syncState?.playing) void controller?.play();
+      }}
       chatNotice={chatNotice}
       onController={handleController}
       onStatus={handleStatus}

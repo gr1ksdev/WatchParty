@@ -59,9 +59,17 @@ export function createYouTubeAdapter(options: AdapterOptions): PlayerController 
   let player: YouTubePlayerInstance | null = null;
   let destroyed = false;
   let desiredPlaying = false;
+  let mutedDesired = false;
   let desiredTime = 0;
   let statusTimer: ReturnType<typeof setInterval> | null = null;
   const pending: Array<() => void> = [];
+
+  const startPlayback = () => {
+    if (!player) return;
+    // Autoplay com áudio é bloqueado: convidados iniciam sem som.
+    if (mutedDesired) player.mute();
+    player.playVideo();
+  };
 
   const stopStatusTimer = () => {
     if (statusTimer !== null) {
@@ -95,21 +103,27 @@ export function createYouTubeAdapter(options: AdapterOptions): PlayerController 
           playsinline: 1,
           rel: 0,
           modestbranding: 1,
+          controls: 0,
           origin: window.location.origin,
         },
         events: {
           onReady: (event) => {
             player = event.target;
             if (desiredTime > 0) player.seekTo(desiredTime, true);
-            if (desiredPlaying) player.playVideo();
+            if (desiredPlaying) startPlayback();
             options.onReady?.();
             emitStatus(desiredPlaying);
             if (desiredPlaying) startStatusTimer();
             while (pending.length > 0) pending.shift()?.();
           },
           onStateChange: (event) => {
-            emitStatus(event.data === YOUTUBE_PLAYING);
-            if (event.data === YOUTUBE_PLAYING) startStatusTimer();
+            // Reafirma o estado autoritativo: um pauseVideo() enviado antes do
+            // player ficar pronto pode ser ignorado pelo iframe do YouTube.
+            if (event.data === YOUTUBE_PLAYING && !desiredPlaying) {
+              player?.pauseVideo();
+            }
+            emitStatus(event.data === YOUTUBE_PLAYING && desiredPlaying);
+            if (event.data === YOUTUBE_PLAYING && desiredPlaying) startStatusTimer();
             else stopStatusTimer();
           },
           onError: (event) => {
@@ -139,9 +153,10 @@ export function createYouTubeAdapter(options: AdapterOptions): PlayerController 
   };
 
   return {
-    play() {
+    play(playOptions) {
       desiredPlaying = true;
-      whenReady(() => player?.playVideo());
+      if (playOptions?.muted) mutedDesired = true;
+      whenReady(() => startPlayback());
     },
     pause() {
       desiredPlaying = false;
@@ -157,6 +172,13 @@ export function createYouTubeAdapter(options: AdapterOptions): PlayerController 
     },
     getDuration() {
       return player?.getDuration() ?? 0;
+    },
+    setMuted(muted) {
+      mutedDesired = muted;
+      whenReady(() => {
+        if (muted) player?.mute();
+        else player?.unMute();
+      });
     },
     destroy() {
       destroyed = true;

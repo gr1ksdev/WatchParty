@@ -74,6 +74,27 @@ describe('usePlaybackSync', () => {
     expect(result.current.syncState).toMatchObject({ playing: true, version: 0 });
   });
 
+  it('usa autoplay sem som para eventos remotos recebidos por convidados', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const player = fakePlayer();
+    const { result } = renderSync({ player, isHost: false });
+
+    act(() => {
+      result.current.applyMessage(
+        { t: 'state', state: { ...roomState, playing: true }, serverTime: 10_000 },
+        timing,
+      );
+    });
+    expect(player.play).toHaveBeenCalledWith({ muted: true });
+
+    const host = renderSync({ player: fakePlayer(), isHost: true });
+    act(() => {
+      host.result.current.sendControl('play', 5);
+    });
+    expect(host.player.play).toHaveBeenCalledWith(undefined);
+  });
+
   it('aplica play/pause/seek e descarta versões antigas', () => {
     const { player, result } = renderSync();
     const control: ServerMessage = {

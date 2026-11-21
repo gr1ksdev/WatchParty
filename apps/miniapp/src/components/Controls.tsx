@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { formatTime } from '../lib/format';
 
 interface ControlsProps {
@@ -9,6 +10,7 @@ interface ControlsProps {
   onPlay: () => void;
   onPause: () => void;
   onSeek: (seconds: number) => void;
+  onEnableSound?: () => void;
 }
 
 /** Controles locais. Convidados veem os botões bloqueados: apenas o host controla. */
@@ -21,7 +23,9 @@ export function Controls({
   onPlay,
   onPause,
   onSeek,
+  onEnableSound,
 }: ControlsProps) {
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const canControl = isHost && !disabled;
   const max = duration > 0 ? duration : 0;
   const value = max > 0 ? Math.min(Math.max(currentTime, 0), max) : 0;
@@ -47,6 +51,19 @@ export function Controls({
         >
           ❚❚ Pausar
         </button>
+        {!isHost && onEnableSound && !soundEnabled && (
+          <button
+            type="button"
+            className="button"
+            aria-label="Ativar som"
+            onClick={() => {
+              onEnableSound();
+              setSoundEnabled(true);
+            }}
+          >
+            🔊 Ativar som
+          </button>
+        )}
       </div>
 
       <div className="controls__timeline">

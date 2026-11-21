@@ -26,6 +26,7 @@ interface RoomViewProps {
   chatMessages?: ChatMessage[];
   onSendChat?: (text: string) => void;
   onControl?: (action: ControlAction, position?: number) => void;
+  onEnableSound?: () => void;
   chatNotice?: string | null;
   onController?: (controller: PlayerController | null) => void;
   onStatus?: (status: PlaybackStatus) => void;
@@ -44,6 +45,7 @@ export function RoomView({
   chatMessages = room.chat,
   onSendChat,
   onControl,
+  onEnableSound,
   chatNotice,
   onController,
   onStatus,
@@ -123,6 +125,7 @@ export function RoomView({
             onPlay={() => (onControl ? onControl('play') : void controller?.play())}
             onPause={() => (onControl ? onControl('pause') : controller?.pause())}
             onSeek={(seconds) => (onControl ? onControl('seek', seconds) : controller?.seekTo(seconds))}
+            onEnableSound={onEnableSound}
           />
         </section>
 

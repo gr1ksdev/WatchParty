@@ -43,11 +43,12 @@ export function createHlsAdapter(options: AdapterOptions): PlayerController {
   }
 
   return {
-    play: () => base.play(),
+    play: (playOptions) => base.play(playOptions),
     pause: () => base.pause(),
     seekTo: (seconds) => base.seekTo(seconds),
     getCurrentTime: () => base.getCurrentTime(),
     getDuration: () => base.getDuration(),
+    setMuted: (muted) => base.setMuted?.(muted),
     destroy() {
       hls.destroy();
       base.destroy();

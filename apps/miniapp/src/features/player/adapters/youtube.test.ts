@@ -48,6 +48,8 @@ class FakeYouTubePlayer implements YouTubePlayerInstance {
   getPlayerState() {
     return this.playing ? 1 : 2;
   }
+  mute = vi.fn();
+  unMute = vi.fn();
   destroy() {
     this.destroyed = true;
   }
@@ -92,6 +94,33 @@ describe('adaptador YouTube', () => {
 
     controller.destroy();
     expect(player?.destroyed).toBe(true);
+  });
+
+  it('inicia sem som quando o autoplay com áudio é bloqueado', async () => {
+    window.YT = { Player: FakeYouTubePlayer } as unknown as YouTubeNamespace;
+    const controller = createYouTubeAdapter(options());
+    controller.play({ muted: true });
+
+    await waitFor(() => expect(FakeYouTubePlayer.instances).toHaveLength(1));
+    const player = FakeYouTubePlayer.instances[0];
+    expect(player?.mute).toHaveBeenCalled();
+    expect(player?.playing).toBe(true);
+    controller.destroy();
+  });
+
+  it('reafirma o pause se o iframe notificar reprodução depois do comando', async () => {
+    window.YT = { Player: FakeYouTubePlayer } as unknown as YouTubeNamespace;
+    const controller = createYouTubeAdapter(options());
+    controller.play();
+    await waitFor(() => expect(FakeYouTubePlayer.instances).toHaveLength(1));
+    const player = FakeYouTubePlayer.instances[0];
+    const pauseSpy = vi.spyOn(player!, 'pauseVideo');
+
+    controller.pause();
+    expect(pauseSpy).toHaveBeenCalledTimes(1);
+    FakeYouTubePlayer.lastOptions?.events?.onStateChange?.({ data: 1 });
+    expect(pauseSpy).toHaveBeenCalledTimes(2);
+    controller.destroy();
   });
 
   it('traduz erros de incorporação da API', async () => {

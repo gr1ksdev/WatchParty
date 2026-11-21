@@ -56,7 +56,7 @@ export function usePlaybackSync({ controller, isHost, duration, timing, send }: 
     };
   }, []);
 
-  const applyToPlayer = useCallback((playing: boolean, target: number) => {
+  const applyToPlayer = useCallback((playing: boolean, target: number, muted = false) => {
     const player = controllerRef.current;
     if (!player) return;
     applyingRemote.current = true;
@@ -64,7 +64,7 @@ export function usePlaybackSync({ controller, isHost, duration, timing, send }: 
       const safeTarget = clampTime(target, durationRef.current);
       if (playing) {
         player.seekTo(safeTarget);
-        void player.play();
+        void player.play(muted ? { muted: true } : undefined);
       } else {
         player.pause();
         player.seekTo(safeTarget);
@@ -100,7 +100,7 @@ export function usePlaybackSync({ controller, isHost, duration, timing, send }: 
         lastVersion.current = Math.max(lastVersion.current, next.version);
         syncRef.current = next;
         setSyncState(next);
-        applyToPlayer(next.playing, expectedPosition(next, currentTiming));
+        applyToPlayer(next.playing, expectedPosition(next, currentTiming), !isHostRef.current);
         return;
       }
 
@@ -120,7 +120,11 @@ export function usePlaybackSync({ controller, isHost, duration, timing, send }: 
         } else {
           const delta =
             (Date.now() + currentTiming.clockOffset - message.serverTime + currentTiming.rtt / 2) / 1000;
-          applyToPlayer(message.playing, message.position + (message.playing ? delta : 0));
+          applyToPlayer(
+            message.playing,
+            message.position + (message.playing ? delta : 0),
+            !isHostRef.current,
+          );
         }
       }
     },
