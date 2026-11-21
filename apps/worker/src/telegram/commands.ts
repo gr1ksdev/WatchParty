@@ -33,17 +33,25 @@ export function buildMiniAppUrl(miniAppUrl: string, roomId: string): string {
   return `${miniAppUrl.trim().replace(/\/+$/, '')}/?start_param=${encodeURIComponent(roomId)}`;
 }
 
-export function buildInviteUrl(botUsername: string, roomId: string): string {
-  return `https://t.me/${encodeURIComponent(botUsername)}?startapp=${encodeURIComponent(roomId)}`;
+/** Link de convite. Com nome curto configurado no BotFather, abre o Mini App direto. */
+export function buildInviteUrl(botUsername: string, roomId: string, shortName?: string): string {
+  const base = `https://t.me/${encodeURIComponent(botUsername)}`;
+  const path = shortName ? `/${encodeURIComponent(shortName)}` : '';
+  return `${base}${path}?startapp=${encodeURIComponent(roomId)}`;
 }
 
-function roomButtons(roomId: string, miniAppUrl: string, botUsername: string): SendMessageOptions {
+function roomButtons(
+  roomId: string,
+  miniAppUrl: string,
+  botUsername: string,
+  shortName?: string,
+): SendMessageOptions {
   const buttons: InlineButton[][] = [
     [{ text: 'Abrir sala', web_app: { url: buildMiniAppUrl(miniAppUrl, roomId) } }],
   ];
 
   if (botUsername) {
-    buttons.push([{ text: 'Convidar amigos', url: buildInviteUrl(botUsername, roomId) }]);
+    buttons.push([{ text: 'Convidar amigos', url: buildInviteUrl(botUsername, roomId, shortName) }]);
   }
 
   return { replyMarkup: { inline_keyboard: buttons }, disableWebPagePreview: true };
@@ -97,8 +105,9 @@ export function buildRoomCardMessage(input: {
   source: VideoSource;
   miniAppUrl: string;
   botUsername: string;
+  miniAppShortName?: string;
 }): { text: string; options: SendMessageOptions } {
-  const { roomId, source, miniAppUrl, botUsername } = input;
+  const { roomId, source, miniAppUrl, botUsername, miniAppShortName } = input;
   const text = [
     '✅ <b>Sala criada!</b>',
     '',
@@ -110,15 +119,16 @@ export function buildRoomCardMessage(input: {
     'Use os botões abaixo para abrir a sala ou convidar amigos.',
   ].join('\n');
 
-  return { text, options: roomButtons(roomId, miniAppUrl, botUsername) };
+  return { text, options: roomButtons(roomId, miniAppUrl, botUsername, miniAppShortName) };
 }
 
 export function buildRoomJoinedMessage(input: {
   roomId: string;
   miniAppUrl: string;
   botUsername: string;
+  miniAppShortName?: string;
 }): { text: string; options: SendMessageOptions } {
-  const { roomId, miniAppUrl, botUsername } = input;
+  const { roomId, miniAppUrl, botUsername, miniAppShortName } = input;
   const text = [
     '🎬 <b>Convite para Watch Party</b>',
     '',
@@ -127,5 +137,5 @@ export function buildRoomJoinedMessage(input: {
     'Toque em <b>Abrir sala</b> para entrar na sala.',
   ].join('\n');
 
-  return { text, options: roomButtons(roomId, miniAppUrl, botUsername) };
+  return { text, options: roomButtons(roomId, miniAppUrl, botUsername, miniAppShortName) };
 }

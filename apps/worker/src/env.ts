@@ -11,6 +11,8 @@ export interface Env {
   MINI_APP_URL: string;
   WORKER_URL?: string;
   TELEGRAM_BOT_USERNAME?: string;
+  /** Nome curto do Mini App de link direto configurado no BotFather (ex.: `play`). */
+  MINI_APP_SHORT_NAME?: string;
   /**
    * Modo de desenvolvimento: aceita um initData simulado, explicitamente marcado.
    * Deve existir apenas em `.dev.vars`; nunca em `wrangler.toml [vars]` ou deploy.

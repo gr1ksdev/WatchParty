@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildHelpMessage,
   buildInvalidLinkMessage,
+  buildInviteUrl,
   buildMiniAppUrl,
   buildRoomCardMessage,
   buildRoomJoinedMessage,
@@ -9,6 +10,12 @@ import {
   parseCommand,
 } from './commands';
 import type { InlineButton } from './api';
+
+describe('buildInviteUrl', () => {
+  it('usa link direto com nome curto quando configurado', () => {
+    expect(buildInviteUrl('bot', 'ABC12345', 'play')).toBe('https://t.me/bot/play?startapp=ABC12345');
+  });
+});
 
 describe('parseCommand', () => {
   it('interpreta /start, /help e /play com argumentos', () => {

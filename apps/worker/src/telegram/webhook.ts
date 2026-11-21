@@ -52,6 +52,7 @@ async function dispatchCommand(
           roomId: command.argument,
           miniAppUrl: env.MINI_APP_URL,
           botUsername: await resolveBotUsername(env, api),
+          ...(env.MINI_APP_SHORT_NAME ? { miniAppShortName: env.MINI_APP_SHORT_NAME } : {}),
         });
         await api.sendMessage(chatId, message.text, message.options);
         return;
@@ -86,6 +87,7 @@ async function dispatchCommand(
         source: room.source,
         miniAppUrl: env.MINI_APP_URL,
         botUsername: await resolveBotUsername(env, api),
+        ...(env.MINI_APP_SHORT_NAME ? { miniAppShortName: env.MINI_APP_SHORT_NAME } : {}),
       });
       await api.sendMessage(chatId, message.text, message.options);
       return;

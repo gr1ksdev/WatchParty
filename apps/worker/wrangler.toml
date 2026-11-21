@@ -9,6 +9,7 @@ workers_dev = true
 MINI_APP_URL = "https://watchparty-miniapp.pages.dev"
 WORKER_URL = "https://watchparty-worker.watchparty-gabriel.workers.dev"
 TELEGRAM_BOT_USERNAME = "lagostaanimobot"
+MINI_APP_SHORT_NAME = "play"
 
 [[durable_objects.bindings]]
 name = "ROOMS"
