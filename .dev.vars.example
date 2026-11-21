@@ -1,0 +1,5 @@
+# Copie para .dev.vars e preencha com seus valores. NÃO versionar .dev.vars.
+TELEGRAM_BOT_TOKEN=123456789:AAExemploDoSeuTokenAqui
+TELEGRAM_WEBHOOK_SECRET=troque-por-uma-string-longa-e-aleatoria
+TELEGRAM_BOT_USERNAME=SeuBot
+WORKER_URL=https://watchparty-worker.seu-account.workers.dev

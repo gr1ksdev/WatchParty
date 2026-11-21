@@ -1,0 +1,26 @@
+{
+  "name": "watchparty",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Watch Party - salas de reprodução sincronizada no Telegram",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "check": "npm run check --workspaces --if-present",
+    "test": "vitest run",
+    "build": "npm run build --workspaces --if-present",
+    "deploy": "npm run deploy --workspace @watchparty/worker",
+    "webhook:set": "node scripts/set-webhook.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.12"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
