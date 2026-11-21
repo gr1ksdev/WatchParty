@@ -57,6 +57,26 @@ afterEach(() => {
 });
 
 describe('usePlaybackSync', () => {
+  it('aplica o estado recebido antes de o player existir assim que ele fica pronto', () => {
+    const player = fakePlayer();
+    const { result, rerender } = renderHook(
+      ({ controller }: { controller: PlayerController | null }) =>
+        usePlaybackSync({ controller, isHost: false, duration: 120, timing, send: () => true }),
+      { initialProps: { controller: null as PlayerController | null } },
+    );
+
+    act(() => {
+      result.current.applyMessage(
+        { t: 'state', state: { ...roomState, playing: true }, serverTime: Date.now() },
+        timing,
+      );
+    });
+    expect(player.play).not.toHaveBeenCalled();
+
+    rerender({ controller: player });
+    expect(player.play).toHaveBeenCalledWith({ muted: true });
+  });
+
   it('aplica o estado inicial calculando a posição esperada pelo relógio do servidor', () => {
     vi.useFakeTimers();
     vi.setSystemTime(10_000);

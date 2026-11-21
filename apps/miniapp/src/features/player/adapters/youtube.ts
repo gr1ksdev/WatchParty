@@ -122,9 +122,14 @@ export function createYouTubeAdapter(options: AdapterOptions): PlayerController 
             if (event.data === YOUTUBE_PLAYING && !desiredPlaying) {
               player?.pauseVideo();
             }
-            emitStatus(event.data === YOUTUBE_PLAYING && desiredPlaying);
-            if (event.data === YOUTUBE_PLAYING && desiredPlaying) startStatusTimer();
-            else stopStatusTimer();
+            // -1 (não iniciado) e 3 (buffering) não mudam o estado lógico.
+            if (event.data === YOUTUBE_PLAYING) {
+              emitStatus(true);
+              startStatusTimer();
+            } else if (event.data === 0 || event.data === 2 || event.data === 5) {
+              emitStatus(false);
+              stopStatusTimer();
+            }
           },
           onError: (event) => {
             options.onError({

@@ -41,14 +41,8 @@ export function usePlaybackSync({ controller, isHost, duration, timing, send }: 
   const applyingRemote = useRef(false);
   const remoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCorrection = useRef(0);
-
-  useEffect(() => {
-    controllerRef.current = controller;
-    durationRef.current = duration;
-    timingRef.current = timing;
-    isHostRef.current = isHost;
-    sendRef.current = send;
-  }, [controller, duration, timing, isHost, send]);
+  /** Estado remoto recebido antes do adaptador existir (ex.: snapshot inicial). */
+  const pendingApply = useRef<{ playing: boolean; target: number; muted: boolean } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -58,7 +52,10 @@ export function usePlaybackSync({ controller, isHost, duration, timing, send }: 
 
   const applyToPlayer = useCallback((playing: boolean, target: number, muted = false) => {
     const player = controllerRef.current;
-    if (!player) return;
+    if (!player) {
+      pendingApply.current = { playing, target, muted };
+      return;
+    }
     applyingRemote.current = true;
     try {
       const safeTarget = clampTime(target, durationRef.current);
@@ -77,6 +74,14 @@ export function usePlaybackSync({ controller, isHost, duration, timing, send }: 
     }
   }, []);
 
+  useEffect(() => {
+    controllerRef.current = controller;
+    durationRef.current = duration;
+    timingRef.current = timing;
+    isHostRef.current = isHost;
+    sendRef.current = send;
+  }, [controller, duration, timing, isHost, send]);
+
   const expectedPosition = useCallback(
     (state: SyncState, currentTiming: SocketTiming) => {
       const nowServer = Date.now() + currentTiming.clockOffset;
@@ -85,6 +90,20 @@ export function usePlaybackSync({ controller, isHost, duration, timing, send }: 
     },
     [],
   );
+
+  // Se o adaptador for recriado (ex.: troca de fonte), reaplica o estado vigente.
+  useEffect(() => {
+    if (!controller) return;
+    const pending = pendingApply.current;
+    const current = syncRef.current;
+    if (!pending && !current) return;
+    pendingApply.current = null;
+    applyToPlayer(
+      pending ? pending.playing : current!.playing,
+      pending ? pending.target : expectedPosition(current!, timingRef.current),
+      pending ? pending.muted : !isHostRef.current,
+    );
+  }, [controller, applyToPlayer, expectedPosition]);
 
   /** Aplica mensagens do servidor ao player, descartando versões antigas. */
   const applyMessage = useCallback(

@@ -39,7 +39,17 @@ export function RoomScreen({ room, isHost, viewerId, user, initData, ticket, pla
 
     switch (message.t) {
       case 'state':
-        setLiveRoom(message.state);
+        // Mantém a mesma referência de `source` quando a mídia não mudou,
+        // senão o componente Player é desmontado e o estado do player é perdido.
+        setLiveRoom((current) => ({
+          ...message.state,
+          source:
+            current.source.kind === message.state.source.kind &&
+            current.source.url === message.state.source.url &&
+            current.source.videoId === message.state.source.videoId
+              ? current.source
+              : message.state.source,
+        }));
         break;
       case 'chat':
         setLiveRoom((current) => ({
