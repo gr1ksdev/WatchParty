@@ -44,7 +44,7 @@ export class TelegramApi implements TelegramApiLike {
 
   constructor(
     private readonly token: string,
-    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly fetchImpl: typeof fetch = (input, init) => globalThis.fetch(input, init),
   ) {
     this.baseUrl = `https://api.telegram.org/bot${token}`;
   }
