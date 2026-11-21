@@ -2,7 +2,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TelegramEvent, TelegramWebApp } from '../types/telegram';
-import { useTelegram } from './useTelegram';
+import { readStartParam, useTelegram } from './useTelegram';
 
 function installWebApp(overrides: Partial<TelegramWebApp> = {}) {
   const listeners = new Map<TelegramEvent, Set<() => void>>();
@@ -37,6 +37,25 @@ function installWebApp(overrides: Partial<TelegramWebApp> = {}) {
 
 afterEach(() => {
   delete window.Telegram;
+  window.history.replaceState(null, '', '/');
+});
+
+describe('readStartParam', () => {
+  it('lê o start_param da query string quando o SDK não expõe a propriedade', () => {
+    window.history.replaceState(null, '', '/?start_param=ABC12345');
+    const webApp = { initDataUnsafe: {} } as TelegramWebApp;
+    expect(readStartParam(webApp)).toBe('ABC12345');
+  });
+
+  it('lê tgWebAppStartParam do hash injetado pelo Telegram', () => {
+    window.history.replaceState(null, '', '/#tgWebAppData=x&tgWebAppStartParam=XYZ67890');
+    expect(readStartParam(null)).toBe('XYZ67890');
+  });
+
+  it('prefere a propriedade do SDK quando disponível', () => {
+    window.history.replaceState(null, '', '/?start_param=DAURL');
+    expect(readStartParam({ startParam: 'DOSDK', initDataUnsafe: {} } as TelegramWebApp)).toBe('DOSDK');
+  });
 });
 
 describe('useTelegram', () => {

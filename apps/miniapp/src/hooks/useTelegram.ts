@@ -15,13 +15,38 @@ export interface TelegramState {
   expand: () => void;
 }
 
+/**
+ * O cliente Telegram entrega o start_param de diferentes formas conforme a versão
+ * e o tipo de botão: propriedade do SDK, initData, hash (#tgWebAppStartParam=...) ou
+ * query string (?start_param=...). Tentamos todas, em ordem de confiabilidade.
+ */
+export function readStartParam(webApp: TelegramWebApp | null): string | null {
+  const candidates: Array<string | undefined | null> = [
+    webApp?.startParam,
+    webApp?.initDataUnsafe.start_param,
+    window.Telegram?.WebView?.initParams?.tgWebAppStartParam,
+  ];
+
+  if (typeof window !== 'undefined') {
+    const hash = window.location.hash.replace(/^#/, '');
+    const queryIndex = hash.indexOf('?');
+    const hashParams = new URLSearchParams(queryIndex >= 0 ? hash.slice(queryIndex + 1) : hash);
+    candidates.push(hashParams.get('tgWebAppStartParam'));
+
+    const query = new URLSearchParams(window.location.search);
+    candidates.push(query.get('start_param'), query.get('tgWebAppStartParam'));
+  }
+
+  return candidates.find((value) => typeof value === 'string' && value.trim().length > 0) ?? null;
+}
+
 function readState(webApp: TelegramWebApp | null, isReady: boolean): TelegramState {
   return {
     available: webApp !== null,
     isReady,
     initData: webApp?.initData ?? '',
     user: webApp?.initDataUnsafe.user ?? null,
-    startParam: webApp?.startParam ?? webApp?.initDataUnsafe.start_param ?? null,
+    startParam: readStartParam(webApp),
     colorScheme: webApp?.colorScheme ?? 'dark',
     themeParams: webApp?.themeParams ?? {},
     platform: webApp?.platform ?? 'unknown',

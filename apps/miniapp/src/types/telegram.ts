@@ -58,8 +58,13 @@ export interface TelegramWebApp {
   setBackgroundColor?(color: string): void;
 }
 
+/** Parâmetros de inicialização que o cliente Telegram injeta no hash da URL. */
+export interface TelegramWebView {
+  initParams?: Record<string, string | undefined>;
+}
+
 declare global {
   interface Window {
-    Telegram?: { WebApp: TelegramWebApp };
+    Telegram?: { WebApp: TelegramWebApp; WebView?: TelegramWebView };
   }
 }
