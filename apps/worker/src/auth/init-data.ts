@@ -56,13 +56,14 @@ async function hex(value: Uint8Array): Promise<string> {
 }
 
 function parsePairs(raw: string): Array<[string, string]> {
-  return raw
-    .split('&')
-    .map((entry) => {
-      const separator = entry.indexOf('=');
-      return separator === -1 ? [entry, ''] : [entry.slice(0, separator), entry.slice(separator + 1)];
-    })
-    .filter((pair) => pair[0].length > 0 && pair[0] !== 'hash') as Array<[string, string]>;
+  // O Telegram assina os VALORES DECODIFICADOS (por exemplo, `user` como JSON),
+  // não os valores percent-encoded da query string.
+  const params = new URLSearchParams(raw);
+  const pairs: Array<[string, string]> = [];
+  params.forEach((value, key) => {
+    if (key && key !== 'hash') pairs.push([key, value]);
+  });
+  return pairs;
 }
 
 function toDataCheckString(pairs: Array<[string, string]>, sorted: boolean): string {
@@ -78,7 +79,7 @@ function toDataCheckString(pairs: Array<[string, string]>, sorted: boolean): str
  *
  * A ordem alfabética dos campos é o formato documentado atualmente. A ordem original
  * também é aceita para compatibilidade com versões antigas dos clientes do Telegram;
- * ambas exigem a mesma chave secreta, então isso não enfraquece a validação.
+ * ambas usam valores decodificados e a mesma chave secreta.
  */
 export async function validateInitData(raw: string, botToken: string, nowSeconds?: number): Promise<ValidatedInitData> {
   if (!raw || raw.length > 8192) {

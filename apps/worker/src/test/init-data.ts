@@ -27,13 +27,11 @@ export async function buildSignedInitData(
   params.set('auth_date', String(overrides.authDate ?? Math.floor(Date.now() / 1000)));
   if (overrides.startParam) params.set('start_param', overrides.startParam);
 
-  const pairs = params
-    .toString()
-    .split('&')
-    .map((entry) => {
-      const separator = entry.indexOf('=');
-      return [entry.slice(0, separator), entry.slice(separator + 1)] as [string, string];
-    });
+  // O Telegram assina os valores decodificados (ex.: `user` como JSON puro).
+  const pairs: Array<[string, string]> = [];
+  params.forEach((value, key) => {
+    if (key !== 'hash') pairs.push([key, value]);
+  });
   pairs.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
 
   const checkString = pairs.map(([key, value]) => `${key}=${value}`).join('\n');
