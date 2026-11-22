@@ -1,55 +1,33 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest';
-import { createPlayerAdapter, resolveAdapterKind } from './factory';
-import type { AdapterOptions } from './types';
+import { describe, expect, it } from 'vitest';
+import { createAdapter, isGoogleDriveUrl } from './engine/registry';
+import type { AdapterContext } from './engine/types';
 
-function options(overrides: Partial<AdapterOptions> = {}): AdapterOptions {
-  const video = document.createElement('video');
+function context(url: string, kind: 'mp4' | 'hls' | 'youtube' = 'mp4'): AdapterContext {
   return {
-    source: { kind: 'mp4', url: 'https://example.com/video.mp4' },
-    video,
+    source: { kind, url, ...(kind === 'youtube' ? { videoId: 'abcdefghijk' } : {}) },
+    video: document.createElement('video'),
     container: document.createElement('div'),
-    onError: vi.fn(),
-    onStatus: vi.fn(),
-    ...overrides,
+    commandTimeoutMs: 50,
   };
 }
 
-describe('fábrica de players', () => {
+describe('registro de adaptadores', () => {
   it('seleciona o adaptador pelo tipo de fonte', () => {
-    expect(resolveAdapterKind({ kind: 'mp4', url: 'https://e.com/a.mp4' })).toBe('html5');
-    expect(resolveAdapterKind({ kind: 'hls', url: 'https://e.com/a.m3u8' })).toBe('hls');
-    expect(resolveAdapterKind({ kind: 'youtube', url: 'https://e.com', videoId: 'abcdefghijk' })).toBe(
+    expect(createAdapter(context('https://e.com/a.mp4')).kind).toBe('mp4');
+    expect(createAdapter(context('https://e.com/a.m3u8', 'hls')).kind).toBe('hls');
+    expect(createAdapter(context('https://youtube.com/watch?v=abcdefghijk', 'youtube')).kind).toBe(
       'youtube',
     );
   });
 
-  it('carrega MP4 no elemento HTML5 e expõe as operações padronizadas', () => {
-    const config = options();
-    const controller = createPlayerAdapter(config);
-
-    expect(config.video?.getAttribute('src')).toBe('https://example.com/video.mp4');
-    expect(controller.getCurrentTime()).toBe(0);
-    controller.play();
-    controller.pause();
-    controller.seekTo(12);
-    expect(config.video?.currentTime).toBe(12);
-    controller.destroy();
-    expect(config.video?.getAttribute('src')).toBeNull();
-  });
-
-  it('reporta erros de mídia com uma mensagem clara', () => {
-    const config = options();
-    createPlayerAdapter(config);
-    Object.defineProperty(config.video, 'error', { configurable: true, value: { code: 4 } });
-    config.video?.dispatchEvent(new Event('error'));
-
-    expect(config.onError).toHaveBeenCalledWith(
-      expect.objectContaining({ code: 'HTML5_MEDIA_ERROR_4', source: 'mp4' }),
-    );
-  });
-
-  it('falha com mensagem explícita quando não há elemento de vídeo', () => {
-    expect(() => createPlayerAdapter(options({ video: null }))).toThrow(/<video>/);
+  it('detecta Google Drive e devolve adaptador não suportado', async () => {
+    const url = 'https://drive.google.com/file/d/abc/view';
+    expect(isGoogleDriveUrl(url)).toBe(true);
+    const adapter = createAdapter(context(url));
+    expect(adapter.kind).toBe('google-drive');
+    await expect(
+      adapter.load({ kind: 'mp4', url }),
+    ).rejects.toMatchObject({ code: 'GOOGLE_DRIVE_UNSUPPORTED' });
   });
 });

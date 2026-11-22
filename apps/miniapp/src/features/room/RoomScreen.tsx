@@ -1,13 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
-import {
-  MAX_CHAT_HISTORY,
-  type Participant,
-  type RoomState,
-  type ServerMessage,
-} from '@watchparty/shared';
+import { MAX_CHAT_HISTORY, type Participant, type RoomState, type ServerMessage } from '@watchparty/shared';
+import type { WatchPartyPlayer } from '../player/engine';
 import { usePlaybackSync } from '../../hooks/usePlaybackSync';
 import { useRoomSocket, type SocketTiming } from '../../hooks/useRoomSocket';
-import type { PlayerController, PlayerError, PlaybackStatus } from '../player/types';
 import { RoomView } from './RoomView';
 
 interface RoomScreenProps {
@@ -20,27 +15,21 @@ interface RoomScreenProps {
   platform?: string;
 }
 
-/** Container que liga WebSocket, sincronização, presença e chat à tela da sala. */
+/** Container que liga WebSocket, motor de reprodução, presença e chat à tela. */
 export function RoomScreen({ room, isHost, viewerId, user, initData, ticket, platform }: RoomScreenProps) {
   const [liveRoom, setLiveRoom] = useState(room);
-  const [controller, setController] = useState<PlayerController | null>(null);
-  const [duration, setDuration] = useState(0);
+  const [engine, setEngine] = useState<WatchPartyPlayer | null>(null);
   const [chatNotice, setChatNotice] = useState<string | null>(null);
   const syncRef = useRef<ReturnType<typeof usePlaybackSync> | null>(null);
 
-  const handleController = useCallback((next: PlayerController | null) => setController(next), []);
-  const handleStatus = useCallback((status: PlaybackStatus) => {
-    setDuration((current) => (current === status.duration ? current : status.duration));
-  }, []);
-  const handlePlayerError = useCallback((_error: PlayerError | null) => {}, []);
+  const handleEngine = useCallback((next: WatchPartyPlayer | null) => setEngine(next), []);
 
   const onMessage = useCallback((message: ServerMessage, timing: SocketTiming) => {
     syncRef.current?.applyMessage(message, timing);
 
     switch (message.t) {
       case 'state':
-        // Mantém a mesma referência de `source` quando a mídia não mudou,
-        // senão o componente Player é desmontado e o estado do player é perdido.
+        // Preserva a referência de `source` para não recriar o player à toa.
         setLiveRoom((current) => ({
           ...message.state,
           source:
@@ -79,20 +68,8 @@ export function RoomScreen({ room, isHost, viewerId, user, initData, ticket, pla
     }
   }, []);
 
-  const socket = useRoomSocket({
-    roomId: room.id,
-    initData,
-    initialTicket: ticket,
-    onMessage,
-  });
-
-  const sync = usePlaybackSync({
-    controller,
-    isHost,
-    duration,
-    timing: socket.timing,
-    send: socket.send,
-  });
+  const socket = useRoomSocket({ roomId: room.id, initData, initialTicket: ticket, onMessage });
+  const sync = usePlaybackSync({ engine, isHost, timing: socket.timing, send: socket.send });
   syncRef.current = sync;
 
   const sendChat = useCallback(
@@ -103,12 +80,7 @@ export function RoomScreen({ room, isHost, viewerId, user, initData, ticket, pla
     [socket.send],
   );
 
-  const handleControl = useCallback(
-    (action: 'play' | 'pause' | 'seek', position?: number) => {
-      sync.sendControl(action, position);
-    },
-    [sync.sendControl],
-  );
+  const hostName = liveRoom.participants.find((participant) => participant.userId === room.hostId)?.firstName;
 
   return (
     <RoomView
@@ -121,16 +93,10 @@ export function RoomScreen({ room, isHost, viewerId, user, initData, ticket, pla
       participants={liveRoom.participants}
       chatMessages={liveRoom.chat}
       onSendChat={sendChat}
-      onControl={handleControl}
-      onEnableSound={() => {
-        // O clique é um gesto do usuário: permite iniciar com som se o autoplay foi bloqueado.
-        controller?.setMuted?.(false);
-        if (sync.syncState?.playing) void controller?.play();
-      }}
       chatNotice={chatNotice}
-      onController={handleController}
-      onStatus={handleStatus}
-      onPlayerError={handlePlayerError}
+      engine={engine}
+      onEngine={handleEngine}
+      hostLabel={hostName ?? `usuário ${room.hostId.slice(0, 4)}`}
     />
   );
 }

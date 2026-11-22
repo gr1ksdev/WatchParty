@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react';
-import type { ClientMessage, RoomState, ServerMessage } from '@watchparty/shared';
-import { DRIFT_INTERVAL_MS, REMOTE_APPLY_WINDOW_MS } from '@watchparty/shared';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { PlayerController } from '../features/player/types';
+import type { ClientMessage, RoomState } from '@watchparty/shared';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlayerEvent, WatchPartyPlayer } from '../features/player/engine';
 import { usePlaybackSync } from './usePlaybackSync';
 
 const roomState: RoomState = {
@@ -12,200 +11,145 @@ const roomState: RoomState = {
   hostId: '777',
   playing: false,
   position: 0,
-  updatedAt: 0,
+  updatedAt: 1_700_000_000_000,
   version: 0,
   settings: { allowGuestControl: false },
   participants: [],
   chat: [],
 };
 
-const timing = { rtt: 0, clockOffset: 0 };
+const timing = { rtt: 10, clockOffset: 5 };
 
-function fakePlayer(currentTime = 0): PlayerController {
+function fakeEngine() {
+  const listeners = new Set<(event: PlayerEvent) => void>();
   return {
-    play: vi.fn(),
-    pause: vi.fn(),
-    seekTo: vi.fn(),
-    getCurrentTime: vi.fn(() => currentTime),
-    getDuration: vi.fn(() => 120),
-    destroy: vi.fn(),
+    setRole: vi.fn(),
+    setTiming: vi.fn(),
+    restore: vi.fn(),
+    applyRemote: vi.fn(),
+    correctDrift: vi.fn().mockReturnValue(false),
+    getExpectedPosition: vi.fn().mockReturnValue(42),
+    subscribe: vi.fn((listener: (event: PlayerEvent) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }),
+    emit(event: PlayerEvent) {
+      for (const listener of [...listeners]) listener(event);
+    },
   };
 }
 
-function renderSync(options: {
-  player?: PlayerController;
-  isHost?: boolean;
-  send?: (message: unknown) => boolean;
-  duration?: number;
-} = {}) {
-  const player = options.player ?? fakePlayer();
-  const send = vi.fn((_message: ClientMessage) => (options.send ? options.send(_message) : true));
-  const result = renderHook(() =>
-    usePlaybackSync({
-      controller: player,
-      isHost: options.isHost ?? false,
-      duration: options.duration ?? 120,
-      timing,
-      send,
-    }),
-  );
-  return { player, send, ...result };
+function asEngine(fake: ReturnType<typeof fakeEngine>): WatchPartyPlayer {
+  return fake as unknown as WatchPartyPlayer;
 }
 
-afterEach(() => {
-  vi.useRealTimers();
-});
-
 describe('usePlaybackSync', () => {
-  it('aplica o estado recebido antes de o player existir assim que ele fica pronto', () => {
-    const player = fakePlayer();
-    const { result, rerender } = renderHook(
-      ({ controller }: { controller: PlayerController | null }) =>
-        usePlaybackSync({ controller, isHost: false, duration: 120, timing, send: () => true }),
-      { initialProps: { controller: null as PlayerController | null } },
+  let engine: ReturnType<typeof fakeEngine>;
+  let sendCalls: ClientMessage[];
+  let send: (message: ClientMessage) => boolean;
+
+  beforeEach(() => {
+    engine = fakeEngine();
+    sendCalls = [];
+    send = (message: ClientMessage) => {
+      sendCalls.push(message);
+      return true;
+    };
+  });
+
+  it('entrega snapshots e controles do servidor ao motor', () => {
+    const { result } = renderHook(() =>
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      usePlaybackSync({ engine: asEngine(engine), isHost: false, timing, send }),
     );
 
     act(() => {
       result.current.applyMessage(
-        { t: 'state', state: { ...roomState, playing: true }, serverTime: Date.now() },
+        { t: 'state', state: { ...roomState, playing: true, version: 2 }, serverTime: 123 },
         timing,
       );
-    });
-    expect(player.play).not.toHaveBeenCalled();
-
-    rerender({ controller: player });
-    expect(player.play).toHaveBeenCalledWith({ muted: true });
-  });
-
-  it('aplica o estado inicial calculando a posição esperada pelo relógio do servidor', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(10_000);
-    const { player, result } = renderSync();
-
-    act(() => {
-      result.current.applyMessage(
-        { t: 'state', state: { ...roomState, playing: true, position: 10, updatedAt: 0 }, serverTime: 10_000 },
-        timing,
-      );
-    });
-
-    expect(player.seekTo).toHaveBeenCalledWith(20);
-    expect(player.play).toHaveBeenCalledOnce();
-    expect(result.current.syncState).toMatchObject({ playing: true, version: 0 });
-  });
-
-  it('usa autoplay sem som para eventos remotos recebidos por convidados', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(10_000);
-    const player = fakePlayer();
-    const { result } = renderSync({ player, isHost: false });
-
-    act(() => {
-      result.current.applyMessage(
-        { t: 'state', state: { ...roomState, playing: true }, serverTime: 10_000 },
-        timing,
-      );
-    });
-    expect(player.play).toHaveBeenCalledWith({ muted: true });
-
-    const host = renderSync({ player: fakePlayer(), isHost: true });
-    act(() => {
-      host.result.current.sendControl('play', 5);
-    });
-    expect(host.player.play).toHaveBeenCalledWith(undefined);
-  });
-
-  it('aplica play/pause/seek e descarta versões antigas', () => {
-    const { player, result } = renderSync();
-    const control: ServerMessage = {
-      t: 'control',
-      action: 'seek',
-      position: 30,
-      playing: true,
-      serverTime: Date.now(),
-      version: 1,
-      by: '777',
-    };
-
-    act(() => {
-      result.current.applyMessage(control, timing);
-      result.current.applyMessage(control, timing); // duplicata
       result.current.applyMessage(
         {
           t: 'control',
-          action: 'pause',
-          position: 30,
-          playing: false,
-          serverTime: Date.now(),
-          version: 1,
+          action: 'play',
+          position: 10,
+          playing: true,
+          serverTime: 130,
+          version: 3,
           by: '777',
         },
         timing,
       );
     });
 
-    expect(player.seekTo).toHaveBeenCalledTimes(1);
-    expect(player.play).toHaveBeenCalledOnce();
-    expect(player.pause).not.toHaveBeenCalled();
-  });
-
-  it('permite que apenas o host envie controles e aplica a ação localmente', () => {
-    const host = renderSync({ isHost: true });
-    act(() => {
-      expect(host.result.current.sendControl('play', 15)).toBe(true);
-    });
-    expect(host.send).toHaveBeenCalledWith(
-      expect.objectContaining({ t: 'control', action: 'play', position: 15 }),
+    expect(engine.restore).toHaveBeenCalledWith(
+      expect.objectContaining({ playing: true, version: 2, updatedAt: 1_700_000_000_000 }),
     );
-    expect(host.player.play).toHaveBeenCalledOnce();
-
-    const guest = renderSync({ isHost: false });
-    act(() => {
-      expect(guest.result.current.sendControl('play', 15)).toBe(false);
-    });
-    expect(guest.send).not.toHaveBeenCalled();
-    expect(guest.player.play).not.toHaveBeenCalled();
+    expect(engine.applyRemote).toHaveBeenCalledWith(
+      expect.objectContaining({ playing: true, position: 10, version: 3, updatedAt: 130 }),
+    );
   });
 
-  it('corrige a deriva quando a diferença passa de 1,5 s', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(20_000);
-    const player = fakePlayer(0);
-    const { result } = renderSync({ player });
-
+  it('envia apenas comandos locais do host e descarta versões antigas', () => {
+    const { result } = renderHook(() =>
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      usePlaybackSync({ engine: asEngine(engine), isHost: true, timing, send }),
+    );
     act(() => {
       result.current.applyMessage(
-        {
-          t: 'state',
-          state: { ...roomState, playing: true, position: 10, updatedAt: 0 },
-          serverTime: 20_000,
-        },
+        { t: 'state', state: { ...roomState, version: 5 }, serverTime: 100 },
         timing,
       );
     });
-    expect(player.seekTo).toHaveBeenCalledWith(30);
 
     act(() => {
-      vi.advanceTimersByTime(DRIFT_INTERVAL_MS);
+      engine.emit({ type: 'command', kind: 'command', action: 'play', position: 12, origin: 'host-local', at: 1 });
+      engine.emit({
+        type: 'command',
+        kind: 'command',
+        action: 'pause',
+        origin: 'remote-sync',
+        at: 2,
+      });
     });
-    expect(vi.mocked(player.seekTo).mock.calls.length).toBeGreaterThan(1);
-    const last = vi.mocked(player.seekTo).mock.calls.at(-1)?.[0] ?? 0;
-    expect(last).toBeGreaterThan(34);
+
+    expect(sendCalls).toHaveLength(1);
+    expect(sendCalls[0]).toMatchObject({ t: 'control', action: 'play', position: 12, version: 5 });
   });
 
-  it('marca a janela anti-loop ao aplicar evento remoto', () => {
-    vi.useFakeTimers();
-    const { result } = renderSync();
+  it('reaplica o último estado remoto quando o motor aparece depois', () => {
+    const initial = { engine: null as WatchPartyPlayer | null, isHost: false, timing, send };
+    const { result, rerender } = renderHook((props: typeof initial) => usePlaybackSync(props), {
+      initialProps: initial,
+    });
+
     act(() => {
       result.current.applyMessage(
-        { t: 'state', state: { ...roomState, playing: false }, serverTime: Date.now() },
+        { t: 'state', state: { ...roomState, playing: true, version: 4 }, serverTime: 10 },
         timing,
       );
     });
-    expect(result.current.isApplyingRemote()).toBe(true);
+    rerender({ ...initial, engine: asEngine(engine) });
+
+    expect(engine.restore).toHaveBeenCalledWith(expect.objectContaining({ version: 4, playing: true }));
+  });
+
+  it('usa a correção de deriva do motor', () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() =>
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      usePlaybackSync({ engine: asEngine(engine), isHost: false, timing, send }),
+    );
     act(() => {
-      vi.advanceTimersByTime(REMOTE_APPLY_WINDOW_MS + 1);
+      result.current.applyMessage(
+        { t: 'state', state: { ...roomState, playing: true, version: 1 }, serverTime: 10 },
+        timing,
+      );
     });
-    expect(result.current.isApplyingRemote()).toBe(false);
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(engine.correctDrift).toHaveBeenCalledWith(42, 1.5);
+    vi.useRealTimers();
   });
 });

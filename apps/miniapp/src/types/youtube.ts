@@ -9,6 +9,8 @@ export interface YouTubePlayerInstance {
   getPlayerState(): number;
   mute(): void;
   unMute(): void;
+  setVolume(percent: number): void;
+  getVideoLoadedFraction(): number;
   destroy(): void;
 }
 

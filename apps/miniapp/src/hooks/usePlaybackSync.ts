@@ -2,208 +2,103 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DRIFT_INTERVAL_MS,
   DRIFT_THRESHOLD_SECONDS,
-  REMOTE_APPLY_WINDOW_MS,
   type ClientMessage,
-  type ControlAction,
   type ServerMessage,
 } from '@watchparty/shared';
-import { clampTime, type PlayerController } from '../features/player/types';
+import type { RemotePlaybackState, WatchPartyPlayer } from '../features/player/engine';
 import type { SocketTiming } from './useRoomSocket';
 
-export interface SyncState {
-  playing: boolean;
-  position: number;
-  updatedAt: number;
-  version: number;
-}
-
 interface Options {
-  controller: PlayerController | null;
+  engine: WatchPartyPlayer | null;
   isHost: boolean;
-  duration: number;
   timing: SocketTiming;
   send: (message: ClientMessage) => boolean;
 }
 
 /**
- * Conecta o estado autoritativo do RoomDO ao adaptador de player.
- * Nunca envia timeupdate contínuo: apenas eventos de controle do host.
+ * Ponte fina entre o motor e o WebSocket. O motor cuida do player; aqui apenas
+ * transformamos eventos de comando local em mensagens e entregamos o estado
+ * autoritativo do servidor ao motor.
  */
-export function usePlaybackSync({ controller, isHost, duration, timing, send }: Options) {
-  const [syncState, setSyncState] = useState<SyncState | null>(null);
-  const controllerRef = useRef(controller);
-  const durationRef = useRef(duration);
-  const timingRef = useRef(timing);
-  const isHostRef = useRef(isHost);
-  const sendRef = useRef(send);
-  const syncRef = useRef<SyncState | null>(null);
+export function usePlaybackSync({ engine, isHost, timing, send }: Options) {
+  const [syncState, setSyncState] = useState<RemotePlaybackState | null>(null);
   const lastVersion = useRef(-1);
-  const applyingRemote = useRef(false);
-  const remoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastCorrection = useRef(0);
-  /** Estado remoto recebido antes do adaptador existir (ex.: snapshot inicial). */
-  const pendingApply = useRef<{ playing: boolean; target: number; muted: boolean } | null>(null);
+  const sendRef = useRef(send);
+  const isHostRef = useRef(isHost);
+  const lastRemote = useRef<RemotePlaybackState | null>(null);
 
   useEffect(() => {
-    return () => {
-      if (remoteTimer.current) clearTimeout(remoteTimer.current);
-    };
-  }, []);
-
-  const applyToPlayer = useCallback((playing: boolean, target: number, muted = false) => {
-    const player = controllerRef.current;
-    if (!player) {
-      pendingApply.current = { playing, target, muted };
-      return;
-    }
-    applyingRemote.current = true;
-    try {
-      const safeTarget = clampTime(target, durationRef.current);
-      if (playing) {
-        player.seekTo(safeTarget);
-        void player.play(muted ? { muted: true } : undefined);
-      } else {
-        player.pause();
-        player.seekTo(safeTarget);
-      }
-    } finally {
-      if (remoteTimer.current) clearTimeout(remoteTimer.current);
-      remoteTimer.current = setTimeout(() => {
-        applyingRemote.current = false;
-      }, REMOTE_APPLY_WINDOW_MS);
-    }
-  }, []);
-
-  useEffect(() => {
-    controllerRef.current = controller;
-    durationRef.current = duration;
-    timingRef.current = timing;
-    isHostRef.current = isHost;
     sendRef.current = send;
-  }, [controller, duration, timing, isHost, send]);
+    isHostRef.current = isHost;
+  }, [send, isHost]);
 
-  const expectedPosition = useCallback(
-    (state: SyncState, currentTiming: SocketTiming) => {
-      const nowServer = Date.now() + currentTiming.clockOffset;
-      const delta = Math.max(0, (nowServer - state.updatedAt + currentTiming.rtt / 2) / 1000);
-      return state.position + (state.playing ? delta : 0);
-    },
-    [],
-  );
-
-  // Se o adaptador for recriado (ex.: troca de fonte), reaplica o estado vigente.
   useEffect(() => {
-    if (!controller) return;
-    const pending = pendingApply.current;
-    const current = syncRef.current;
-    if (!pending && !current) return;
-    pendingApply.current = null;
-    applyToPlayer(
-      pending ? pending.playing : current!.playing,
-      pending ? pending.target : expectedPosition(current!, timingRef.current),
-      pending ? pending.muted : !isHostRef.current,
-    );
-  }, [controller, applyToPlayer, expectedPosition]);
+    engine?.setRole(isHost);
+  }, [engine, isHost]);
 
-  /** Aplica mensagens do servidor ao player, descartando versões antigas. */
+  useEffect(() => {
+    engine?.setTiming(timing);
+  }, [engine, timing]);
+
+  // Ajuste 3: se o estado do servidor chegou antes do motor, reaplica quando ele nascer.
+  useEffect(() => {
+    if (engine && lastRemote.current) engine.restore(lastRemote.current);
+  }, [engine]);
+
+  useEffect(() => {
+    if (!engine) return;
+    return engine.subscribe((event) => {
+      if (event.kind !== 'command' || event.origin !== 'host-local' || !isHostRef.current) return;
+      const version = lastVersion.current >= 0 ? lastVersion.current : undefined;
+      sendRef.current({
+        t: 'control',
+        action: event.action,
+        ...(event.position === undefined ? {} : { position: event.position }),
+        ...(version === undefined ? {} : { version }),
+      });
+    });
+  }, [engine]);
+
   const applyMessage = useCallback(
     (message: ServerMessage, currentTiming: SocketTiming) => {
+      engine?.setTiming(currentTiming);
       if (message.t === 'state') {
-        const next: SyncState = {
+        const remote: RemotePlaybackState = {
           playing: message.state.playing,
           position: message.state.position,
           updatedAt: message.state.updatedAt,
           version: message.state.version,
         };
-        // Snapshot é sempre autoritativo (especialmente após reconexão); não é descartado.
-        lastVersion.current = Math.max(lastVersion.current, next.version);
-        syncRef.current = next;
-        setSyncState(next);
-        applyToPlayer(next.playing, expectedPosition(next, currentTiming), !isHostRef.current);
+        lastVersion.current = Math.max(lastVersion.current, remote.version);
+        lastRemote.current = remote;
+        setSyncState(remote);
+        engine?.restore(remote);
         return;
       }
-
       if (message.t === 'control') {
         if (message.version <= lastVersion.current) return;
         lastVersion.current = message.version;
-        const next: SyncState = {
+        const remote: RemotePlaybackState = {
           playing: message.playing,
           position: message.position,
           updatedAt: message.serverTime,
           version: message.version,
         };
-        syncRef.current = next;
-        setSyncState(next);
-        if (message.action === 'pause') {
-          applyToPlayer(false, message.position);
-        } else {
-          const delta =
-            (Date.now() + currentTiming.clockOffset - message.serverTime + currentTiming.rtt / 2) / 1000;
-          applyToPlayer(
-            message.playing,
-            message.position + (message.playing ? delta : 0),
-            !isHostRef.current,
-          );
-        }
+        lastRemote.current = remote;
+        setSyncState(remote);
+        engine?.applyRemote(remote);
       }
     },
-    [applyToPlayer, expectedPosition],
+    [engine],
   );
 
-  /** Host envia apenas eventos de controle e aplica a ação localmente de forma otimista. */
-  const sendControl = useCallback(
-    (action: ControlAction, position?: number): boolean => {
-      if (!isHostRef.current) return false;
-      const player = controllerRef.current;
-      const rawPosition = position ?? player?.getCurrentTime() ?? 0;
-      const sentPosition = clampTime(rawPosition, durationRef.current);
-      const version = lastVersion.current >= 0 ? lastVersion.current : undefined;
-      const ok = sendRef.current({
-        t: 'control',
-        action,
-        position: sentPosition,
-        ...(version === undefined ? {} : { version }),
-      });
-      if (!ok) return false;
-
-      applyToPlayer(action === 'play', sentPosition);
-      const previous = syncRef.current;
-      const next: SyncState = {
-        playing: action === 'play' ? true : action === 'pause' ? false : (previous?.playing ?? false),
-        position: sentPosition,
-        updatedAt: Date.now() + timingRef.current.clockOffset,
-        version: Math.max(lastVersion.current, 0) + 1,
-      };
-      syncRef.current = next;
-      setSyncState(next);
-      return true;
-    },
-    [applyToPlayer],
-  );
-
-  // Correção de deriva: seek apenas quando a diferença passa de 1,5 s.
   useEffect(() => {
     const interval = setInterval(() => {
-      const state = syncRef.current;
-      const player = controllerRef.current;
-      if (!state?.playing || !player || applyingRemote.current) return;
-      if (Date.now() - lastCorrection.current < DRIFT_INTERVAL_MS) return;
-
-      const expected = expectedPosition(state, timingRef.current);
-      const actual = player.getCurrentTime();
-      if (durationRef.current > 0 && Math.abs(actual - expected) > DRIFT_THRESHOLD_SECONDS) {
-        player.seekTo(clampTime(expected, durationRef.current));
-        lastCorrection.current = Date.now();
-      }
+      if (!engine || !syncState?.playing) return;
+      engine.correctDrift(engine.getExpectedPosition(), DRIFT_THRESHOLD_SECONDS);
     }, DRIFT_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [expectedPosition]);
+  }, [engine, syncState?.playing]);
 
-  return {
-    syncState,
-    applyMessage,
-    sendControl,
-    expectedPosition,
-    isApplyingRemote: () => applyingRemote.current,
-  };
+  return { syncState, applyMessage };
 }

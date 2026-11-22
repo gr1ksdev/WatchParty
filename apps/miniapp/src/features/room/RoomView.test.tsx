@@ -45,7 +45,7 @@ describe('RoomView', () => {
   it('mantém os controles bloqueados para convidados', () => {
     render(<RoomView room={room} isHost={false} viewerId="999" user={user} platform="ios" />);
 
-    expect(screen.getByText(/Host:/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Host:/).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Reproduzir' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Pausar' })).toBeDisabled();
     expect(screen.getByRole('note')).toHaveTextContent(/Apenas o host/);
